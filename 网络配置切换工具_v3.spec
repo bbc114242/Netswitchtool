@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='网络配置切换工具',
+    name='网络配置切换工具_v3',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

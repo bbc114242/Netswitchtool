@@ -108,17 +108,25 @@ class NetworkManager:
             for line in result.stdout.split('\n'):
                 line = line.strip()
                 
-                # 检测适配器名称行（格式如："Ethernet adapter 以太网:" 或 "Wireless LAN adapter WLAN 2:"）
-                if line and not line.startswith(' ') and line.endswith(':') and 'adapter' in line:
+                # 检测适配器名称行（支持中英文格式）
+                # 英文格式："Ethernet adapter 以太网:" 或 "Wireless LAN adapter WLAN 2:"
+                # 中文格式："以太网适配器 以太网:" 或 "无线局域网适配器 WLAN 2:"
+                if line and not line.startswith(' ') and line.endswith(':') and ('adapter' in line or '适配器' in line):
                     # 处理上一个适配器
                     if current_adapter and current_description:
                         self._process_adapter(current_adapter, current_description, has_ip, adapter_index, active_adapters, adapters)
                         adapter_index += 1
                     
-                    # 提取适配器名称（adapter后面的部分，去掉冒号）
+                    # 提取适配器名称
+                    adapter_name = None
                     if 'adapter ' in line:
+                        # 英文格式："Ethernet adapter 以太网:"
                         adapter_name = line.split('adapter ')[1].rstrip(':')
-                        
+                    elif '适配器 ' in line:
+                        # 中文格式："以太网适配器 以太网:"
+                        adapter_name = line.split('适配器 ')[1].rstrip(':')
+                    
+                    if adapter_name:
                         # 过滤一些不需要的适配器
                         skip_keywords = [
                             'Loopback', 'Teredo', 'ISATAP', 'Tunnel', 
@@ -131,6 +139,8 @@ class NetworkManager:
                             has_ip = False
                         else:
                             current_adapter = None
+                    else:
+                        current_adapter = None
                 
                 # 获取适配器描述
                 elif current_adapter and (line.startswith('Description') or line.startswith('描述')):
@@ -173,20 +183,16 @@ class NetworkManager:
         if not is_virtual:
             print(f"检查适配器: {adapter_name} ({description})")
             
-            # 尝试获取配置，只添加能成功获取配置的适配器
-            current_config = self.get_current_config(adapter_name)
-            if current_config is not None:
+            # 降低过滤条件：只要有IP地址就认为是已连接的适配器
+            if has_ip:
                 adapter = NetworkAdapter(adapter_name, description, index)
-                
-                # 根据是否有IP地址和配置状态分类
-                if has_ip and current_config.get('ip') and current_config.get('ip') != '0.0.0.0':
-                    active_adapters.append(adapter)
-                    print(f"活跃适配器: {adapter_name} (IP: {current_config.get('ip')})")
-                else:
-                    adapters.append(adapter)
-                    print(f"可用适配器: {adapter_name}")
+                active_adapters.append(adapter)
+                print(f"已连接适配器: {adapter_name}")
             else:
-                print(f"跳过适配器 '{adapter_name}' - 无法获取配置")
+                # 对于没有IP的适配器，也添加到列表中但标记为未连接
+                adapter = NetworkAdapter(adapter_name, description, index)
+                adapters.append(adapter)
+                print(f"未连接适配器: {adapter_name}")
     
     def get_current_config(self, adapter_name: str) -> Optional[Dict]:
         """获取当前网络配置"""
